@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基于STM32的楼宇能耗检测与节能控制系统</title>
+    <script src="https://cdn.tailwindcss.com/3.3.3"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        
+        .glassmorphism {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+        
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 28px 0 rgba(99, 102, 241, 0.3);
+        }
+        
+        .chart-container {
+            height: 300px;
+            width: 100%;
+            position: relative;
+        }
+        
+        .blob {
+            position: absolute;
+            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+            filter: blur(60px);
+            opacity: 0.1;
+            border-radius: 50%;
+            z-index: -1;
+        }
+        
+        .highlight-text {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .highlight-text::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background-color: rgba(99, 102, 241, 0.3);
+            z-index: -1;
+        }
+        
+        .device-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        
+        .status-online {
+            background-color: #10b981;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+        
+        .status-offline {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+        
+        .status-warning {
+            background-color: #f59e0b;
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+        }
+        
+        .nav-link {
+            position: relative;
+        }
+        
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: #3b82f6;
+            transition: width 0.3s ease;
+        }
+        
+        .nav-link:hover::after {
+            width: 100%;
+        }
+        
+        .glow {
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+        
+        .gradient-text {
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="blob w-96 h-96 top-0 left-0"></div>
+    <div class="blob w-80 h-80 bottom-0 right-0"></div>
+
+    <!-- 导航条 -->
+    <nav class="glassmorphism sticky top-0 z-50 p-4">
+        <div class="container mx-auto flex items-center justify-between">
+            <div class="text-2xl font-bold">
+                <i class="fas fa-building mr-2 gradient-text"></i>
+                <span class="gradient-text">STM32楼宇能耗系统</span>
+            </div>
+            <div class="hidden md:flex space-x-8">
+                <a href="#dashboard" class="text-gray-300 hover:text-white transition-colors nav-link">数据看板</a>
+                <a href="#control" class="text-gray-300 hover:text-white transition-colors nav-link">设备控制</a>
+                <a href="#settings" class="text-gray-300 hover:text-white transition-colors nav-link">系统设置</a>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="hidden md:block text-sm text-gray-400">管理员</div>
+                <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center justify-center text-white glow">
+                    <i class="fas fa-user"></i>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容区 -->
+    <main class="container mx-auto py-8 px-4">
+        <!-- 数据看板 -->
+        <section id="dashboard" class="mb-12">
+            <h2 class="text-3xl font-bold mb-8 text-white flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center justify-center text-white mr-4 glow">
+                    <i class="fas fa-chart-bar"></i>
+                </div>
+                <span class="gradient-text">能耗数据看板</span>
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="glassmorphism p-6 card-hover">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-300">今日总能耗</h3>
+                        <div class="text-blue-400"><i class="fas fa-bolt"></i></div>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-2">1,245 <span class="text-lg text-gray-400">kWh</span></div>
+                    <div class="text-sm text-gray-400">较昨日 <span class="text-green-400">↓8.2%</span></div>
+                </div>
+                
+                <div class="glassmorphism p-6 card-hover">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-300">当前功率</h3>
+                        <div class="text-blue-400"><i class="fas fa-tachometer-alt"></i></div>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-2">85.6 <span class="text-lg text-gray-400">kW</span></div>
+                    <div class="text-sm text-gray-400">峰值 112.3kW</div>
+                </div>
+                
+                <div class="glassmorphism p-6 card-hover">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-300">节能率</h3>
+                        <div class="text-blue-400"><i class="fas fa-leaf"></i></div>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-2">15.8 <span class="text-lg text-gray-400">%</span></div>
+                    <div class="text-sm text-gray-400">目标 20%</div>
+                </div>
+                
+                <div class="glassmorphism p-6 card-hover">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-300">碳排放</h3>
+                        <div class="text-blue-400"><i class="fas fa-cloud"></i></div>
+                    </div>
+                    <div class="text-3xl font-bold text-white mb-2">1,024 <span class="text-lg text-gray-400">kg</span></div>
+                    <div class="text-sm text-gray-400">较昨日 <span class="text-green-400">↓6.5%</span></div>
+                </div>
+            </div>
+            
+            <div class="glassmorphism p-6 mb-8">
+                <div class="flex items-center mb-4">
+                    <h3 class="text-xl font-semibold text-white">能耗趋势分析</h3>
+                    <div class="ml-auto flex space-x-2">
+                        <button class="px-3 py-1 text-sm bg-blue-600 text-white rounded-full glow">日</button>
+                        <button class="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded-full">周</button>
+                        <button class="px-3 py-1 text-sm bg-gray-700 text-gray-300 rounded-full">月</button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="energyTrendChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="glassmorphism p-6">
+                    <h3 class="text-xl font-semibold text-white mb-4">能耗分布</h3>
+                    <div class="chart-container">
+                        <canvas id="energyDistributionChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="glassmorphism p-6">
+                    <h3 class="text-xl font-semibold text-white mb-4">设备状态</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                            <div class="flex items-center">
+                                <span class="device-status status-online"></span>
+                                <span class="font-medium text-gray-200">中央空调系统</span>
+                            </div>
+                            <span class="text-sm text-green-400">运行中</span>
+                        </div>
+                        <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                            <div class="flex items-center">
+                                <span class="device-status status-online"></span>
+                                <span class="font-medium text-gray-200">照明系统</span>
+                            </div>
+                            <span class="text-sm text-green-400">运行中</span>
+                        </div>
+                        <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                            <div class="flex items-center">
+                                <span class="device-status status-warning"></span>
+                                <span class="font-medium text-gray-200">电梯系统</span>
+                            </div>
+                            <span class="text-sm text-yellow-400">待机</span>
+                        </div>
+                        <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                            <div class="flex items-center">
+                                <span class="device-status status-offline"></span>
+                                <span class="font-medium text-gray-200">备用电源</span>
+                            </div>
+                            <span class="text-sm text-red-400">离线</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- 设备控制 -->
+        <section id="control" class="mb-12">
+            <h2 class="text-3xl font-bold mb-8 text-white flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center justify-center text-white mr-4 glow">
+                    <i class="fas fa-sliders-h"></i>
+                </div>
+                <span class="gradient-text">设备控制系统</span>
+            </h2>
+            
+            <div class="glassmorphism p-6 mb-8">
+                <h3 class="text-xl font-semibold text-white mb-6">主要设备控制</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 card-hover">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-blue-900 flex items-center justify-center text-blue-400 mr-3">
+                                <i class="fas fa-snowflake"></i>
+                            </div>
+                            <span class="font-medium text-gray-200">中央空调</span>
+                        </div>
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-sm text-gray-400">当前状态</span>
+                            <span class="text-sm font-medium text-green-400">运行中</span>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="flex-1 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors glow">关闭</button>
+                            <button class="flex-1 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 transition-colors">设置</button>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 card-hover">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-blue-900 flex items-center justify-center text-blue-400 mr-3">
+                                <i class="fas fa-lightbulb"></i>
+                            </div>
+                            <span class="font-medium text-gray-200">照明系统</span>
+                        </div>
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-sm text-gray-400">当前状态</span>
+                            <span class="text-sm font-medium text-green-400">运行中</span>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="flex-1 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors glow">关闭</button>
+                            <button class="flex-1 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 transition-colors">设置</button>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 card-hover">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-blue-900 flex items-center justify-center text-blue-400 mr-3">
+                                <i class="fas fa-elevator"></i>
+                            </div>
+                            <span class="font-medium text-gray-200">电梯系统</span>
+                        </div>
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-sm text-gray-400">当前状态</span>
+                            <span class="text-sm font-medium text-yellow-400">待机</span>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="flex-1 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors glow">启动</button>
+                            <button class="flex-1 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 transition-colors">设置</button>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 card-hover">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-blue-900 flex items-center justify-center text-blue-400 mr-3">
+                                <i class="fas fa-battery-three-quarters"></i>
+                            </div>
+                            <span class="font-medium text-gray-200">备用电源</span>
+                        </div>
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-sm text-gray-400">当前状态</span>
+                            <span class="text-sm font-medium text-red-400">离线</span>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="flex-1 py-2 bg-gray-600 text-gray-500 rounded-md cursor-not-allowed" disabled>启动</button>
+                            <button class="flex-1 py-2 bg-gray-700 text-gray-300 rounded-md hover:bg-gray-600 transition-colors">设置</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="glassmorphism p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">节能模式设置</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 card-hover">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-green-900 flex items-center justify-center text-green-400 mr-3">
+                                <i class="fas fa-leaf"></i>
+                            </div>
+                            <span class="font-medium text-gray-200">基础节能</span>
+                        </div>
+                        <p class="text-sm text-gray-400 mb-4">适度降低能耗，保持基本舒适度</p>
+                        <button class="w-full py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors glow">启用</button>
+                    </div>
+                    
+                    <div class="bg-gray-800 p-4 rounded-lg border border-blue-500 border-2 card-hover glow">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-blue-900 flex items-center justify-center text-blue-400 mr-3">
+                                <i class="fas fa-bolt"></i>
+                            </div>
+                            <span class="font-medium text-gray-200">智能节能</span>
+                        </div>
+                        <p class="text-sm text-gray-400 mb-4">根据使用情况自动调节，推荐模式</p>
+                        <button class="w-full py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors glow">已启用</button>
+                    </div>
+                    
+                    <div class="bg-gray-800 p-4 rounded-lg border border-gray-700 card-hover">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-red-900 flex items-center justify-center text-red-400 mr-3">
+                                <i class="fas fa-fire"></i>
+                            </div>
+                            <span class="font-medium text-gray-200">极致节能</span>
+                        </div>
+                        <p class="text-sm text-gray-400 mb-4">最大限度节能，可能影响舒适度</p>
+                        <button class="w-full py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors glow">启用</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- 系统设置 -->
+        <section id="settings" class="mb-12">
+            <h2 class="text-3xl font-bold mb-8 text-white flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center justify-center text-white mr-4 glow">
+                    <i class="fas fa-cog"></i>
+                </div>
+                <span class="gradient-text">系统设置</span>
+            </h2>
+            
+            <div class="glassmorphism p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-semibold text-white mb-6">用户设置</h3>
+                        
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                                <div class="flex items-center">
+                                    <i class="fas fa-user text-blue-400 mr-3"></i>
+                                    <span class="font-medium text-gray-200">用户名</span>
+                                </div>
+                                <span class="text-sm text-gray-400">admin</span>
+                            </div>
+                            
+                            <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                                <div class="flex items-center">
+                                    <i class="fas fa-envelope text-blue-400 mr-3"></i>
+                                    <span class="font-medium text-gray-200">邮箱</span>
+                                </div>
+                                <span class="text-sm text-gray-400">admin@example.com</span>
+                            </div>
+                            
+                            <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                                <div class="flex items-center">
+                                    <i class="fas fa-key text-blue-400 mr-3"></i>
+                                    <span class="font-medium text-gray-200">密码</span>
+                                </div>
+                                <button class="text-sm text-blue-400 hover:text-blue-300">修改</button>
+                            </div>
+                            
+                            <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                                <div class="flex items-center">
+                                    <i class="fas fa-bell text-blue-400 mr-3"></i>
+                                    <span class="font-medium text-gray-200">通知设置</span>
+                                </div>
+                                <button class="text-sm text-blue-400 hover:text-blue-300">配置</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-semibold text-white mb-6">系统配置</h3>
+                        
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                                <div class="flex items-center">
+                                    <i class="fas fa-database text-blue-400 mr-3"></i>
+                                    <span class="font-medium text-gray-200">数据存储</span>
+                                </div>
+                                <span class="text-sm text-gray-400">30天</span>
+                            </div>
+                            
+                            <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                                <div class="flex items-center">
+                                    <i class="fas fa-sync-alt text-blue-400 mr-3"></i>
+                                    <span class="font-medium text-gray-200">数据更新频率</span>
+                                </div>
+                                <span class="text-sm text-gray-400">5分钟</span>
+                            </div>
+                            
+                            <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                                <div class="flex items-center">
+                                    <i class="fas fa-shield-alt text-blue-400 mr-3"></i>
+                                    <span class="font-medium text-gray-200">系统安全</span>
+                                </div>
+                                <span class="text-sm text-green-400">已保护</span>
+                            </div>
+                            
+                            <div class="flex items-center justify-between p-4 bg-gray-800 rounded-lg">
+                                <div class="flex items-center">
+                                    <i class="fas fa-info-circle text-blue-400 mr-3"></i>
+                                    <span class="font-medium text-gray-200">系统版本</span>
+                                </div>
+                                <span class="text-sm text-gray-400">v2.3.5</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-8 pt-6 border-t border-gray-700">
+                    <h3 class="text-xl font-semibold text-white mb-4">系统信息</h3>
+                    <div class="bg-gray-800 p-4 rounded-lg">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-microchip text-blue-400 mr-3"></i>
+                            <span class="font-medium text-gray-200">硬件平台:</span>
+                            <span class="ml-2 text-gray-400">STM32F407VET6</span>
+                        </div>
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-code text-blue-400 mr-3"></i>
+                            <span class="font-medium text-gray-200">固件版本:</span>
+                            <span class="ml-2 text-gray-400">v1.2.0</span>
+                        </div>
+                        <div class="flex items-center">
+                            <i class="fas fa-wifi text-blue-400 mr-3"></i>
+                            <span class="font-medium text-gray-200">网络状态:</span>
+                            <span class="ml-2 text-green-400">已连接</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <footer class="bg-gray-900 text-gray-400 py-8">
+        <div class="container mx-auto px-4">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <div class="text-xl font-bold mb-2">
+                        <i class="fas fa-building mr-2 text-blue-400"></i>
+                        <span class="text-white">STM32楼宇能耗系统</span>
+                    </div>
+                    <p class="text-sm">基于STM32的楼宇能耗检测与节能控制系统</p>
+                </div>
+                <div class="flex space-x-6">
+                    <a href="#" class="hover:text-white transition-colors">关于我们</a>
+                    <a href="#" class="hover:text-white transition-colors">帮助文档</a>
+                    <a href="#" class="hover:text-white transition-colors">隐私政策</a>
+                </div>
+            </div>
+            <div class="mt-8 pt-6 border-t border-gray-800 text-center text-sm">
+                <p>© 2023 STM32楼宇能耗系统. 保留所有权利.</p>
+                <p class="mt-2">页面内容均由 AI 生成，仅供参考</p>
+                <p class="mt-1">created by <a href="https://space.coze.cn" class="text-blue-400 hover:text-blue-300">coze space</a></p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 能耗趋势图表
+            const trendCtx = document.getElementById('energyTrendChart').getContext('2d');
+            new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
+                    datasets: [
+                        {
+                            label: '今日能耗 (kWh)',
+                            data: [120, 90, 150, 210, 180, 160, 130],
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: '昨日能耗 (kWh)',
+                            data: [140, 110, 170, 230, 200, 180, 150],
+                            borderColor: 'rgba(156, 163, 175, 1)',
+                            backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: true,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                color: '#e2e8f0'
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: '#e2e8f0'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#e2e8f0'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // 能耗分布图表
+            const distributionCtx = document.getElementById('energyDistributionChart').getContext('2d');
+            new Chart(distributionCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['空调系统', '照明系统', '电梯系统', '办公设备', '其他'],
+                    datasets: [{
+                        data: [35, 25, 15, 20, 5],
+                        backgroundColor: [
+                            'rgba(59, 130, 246, 0.8)',
+                            'rgba(16, 185, 129, 0.8)',
+                            'rgba(245, 158, 11, 0.8)',
+                            'rgba(139, 92, 246, 0.8)',
+                            'rgba(156, 163, 175, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(59, 130, 246, 1)',
+                            'rgba(16, 185, 129, 1)',
+                            'rgba(245, 158, 11, 1)',
+                            'rgba(139, 92, 246, 1)',
+                            'rgba(156, 163, 175, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                color: '#e2e8f0'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ${value}kWh (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // 平滑滚动
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    document.querySelector(this.getAttribute('href')).scrollIntoView({
+                        behavior: 'smooth'
+                    });
+                });
+            });
+        });
+    </script>
+</body>
+</html>

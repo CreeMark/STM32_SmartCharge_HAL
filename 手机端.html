@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>智能家居控制中心</title>
+    <script src="https://cdn.tailwindcss.com/3.3.3"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+            overflow-x: hidden;
+        }
+
+        .device-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+        }
+
+        .device-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+
+        .control-button {
+            width: 100%;
+            min-height: 60px;
+            border-radius: 16px;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+        }
+
+        .control-button.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+
+        .control-button.inactive {
+            background-color: #f1f5f9;
+            color: #64748b;
+        }
+
+        .control-button:hover {
+            transform: scale(1.03);
+        }
+
+        .power-indicator {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f1f5f9;
+            margin: 0 auto;
+        }
+
+        .power-indicator.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+
+        .power-indicator::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            opacity: 0;
+        }
+
+        .power-indicator.active::before {
+            background: rgba(59, 130, 246, 0.5);
+            opacity: 1;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        .stat-card {
+            background-color: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .chart-container {
+            height: 220px;
+            width: 100%;
+            position: relative;
+        }
+
+        .nav-shadow {
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        /* 开关样式 */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 30px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #e2e8f0;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #3b82f6;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(30px);
+        }
+
+        /* 能耗数据图表动画 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease forwards;
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-16">
+    <!-- 顶部导航栏 -->
+    <nav class="bg-white sticky top-0 z-50 p-4 nav-shadow">
+        <div class="container mx-auto flex items-center justify-between">
+            <div class="text-xl font-bold text-blue-600">
+                <i class="fas fa-home mr-2"></i>楼宇能耗检测控制
+            </div>
+            <div class="flex items-center space-x-4">
+                <button class="text-gray-600" aria-label="设置">
+                    <i class="fas fa-cog text-lg"></i>
+                </button>
+                <button class="text-gray-600" aria-label="通知">
+                    <i class="fas fa-bell text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 主要内容区域 -->
+    <main class="container mx-auto px-4 py-6">
+        <!-- 设备状态显示区 -->
+        <section class="mb-8">
+            <h2 class="text-lg font-semibold mb-4 text-gray-700">设备状态</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <!-- 总开关状态 -->
+                <div class="device-card p-4 col-span-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="power-indicator active mr-4">
+                                <i class="fas fa-power-off text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-medium text-gray-900">家庭总电源</h3>
+                                <p class="text-sm text-gray-500">当前状态: 开启</p>
+                            </div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" checked id="mainPowerToggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500">实时功率</p>
+                            <p class="text-2xl font-bold text-blue-600">1.2 kW</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">运行设备数</p>
+                            <p class="text-2xl font-bold text-blue-600">5 台</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-500">室内温度</p>
+                            <p class="text-2xl font-bold text-blue-600">24°C</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 手动控制按钮 -->
+        <section class="mb-8">
+            <h2 class="text-lg font-semibold mb-4 text-gray-700">设备控制</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <!-- 灯光控制 -->
+                <div class="control-button active" id="lightControl">
+                    <i class="fas fa-lightbulb text-3xl mb-2"></i>
+                    <span class="font-medium">室内01照明</span>
+                </div>
+                <div class="control-button inactive" id="bedroomLightControl">
+                    <i class="fas fa-lightbulb text-3xl mb-2"></i>
+                    <span class="font-medium">走廊01灯光</span>
+                </div>
+                
+                <!-- 空调控制 -->
+                <div class="control-button active" id="acControl">
+                    <i class="fas fa-wind text-3xl mb-2"></i>
+                    <span class="font-medium">室内01空调</span>
+                </div>
+                <div class="control-button inactive" id="bedroomAcControl">
+                    <i class="fas fa-wind text-3xl mb-2"></i>
+                    <span class="font-medium">室内02空调</span>
+                </div>
+                
+                <!-- 插座分组控制 -->
+                <div class="control-button active" id="socket1Control">
+                    <i class="fas fa-plug text-3xl mb-2"></i>
+                    <span class="font-medium">影音设备</span>
+                </div>
+                <div class="control-button inactive" id="socket2Control">
+                    <i class="fas fa-plug text-3xl mb-2"></i>
+                    <span class="font-medium">厨房电器</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 能耗数据简览 -->
+        <section class="mb-8">
+            <h2 class="text-lg font-semibold mb-4 text-gray-700">能耗数据</h2>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="stat-card p-4">
+                    <p class="text-sm text-gray-500">当日用电量</p>
+                    <p class="text-3xl font-bold text-blue-600">8.5 kWh</p>
+                    <p class="text-xs text-green-500 mt-1"><i class="fas fa-arrow-down"></i> 较昨日下降12%</p>
+                </div>
+                <div class="stat-card p-4">
+                    <p class="text-sm text-gray-500">节能率</p>
+                    <p class="text-3xl font-bold text-blue-600">23%</p>
+                    <p class="text-xs text-green-500 mt-1"><i class="fas fa-arrow-up"></i> 较上周提升5%</p>
+                </div>
+            </div>
+            
+            <!-- 能耗趋势图表 -->
+            <div class="device-card p-4 fade-in">
+                <h3 class="font-medium text-gray-900 mb-3">本周能耗趋势</h3>
+                <div class="chart-container">
+                    <canvas id="energyChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- 快捷场景 -->
+        <section class="mb-8">
+            <h2 class="text-lg font-semibold mb-4 text-gray-700">快捷场景</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="control-button bg-gradient-to-r from-purple-500 to-indigo-600 text-white" id="sceneHome">
+                    <i class="fas fa-house-user text-3xl mb-2"></i>
+                    <span class="font-medium">回家模式</span>
+                </div>
+                <div class="control-button bg-gradient-to-r from-amber-500 to-orange-600 text-white" id="sceneAway">
+                    <i class="fas fa-sign-out-alt text-3xl mb-2"></i>
+                    <span class="font-medium">离家模式</span>
+                </div>
+                <div class="control-button bg-gradient-to-r from-blue-500 to-cyan-600 text-white" id="sceneSleep">
+                    <i class="fas fa-moon text-3xl mb-2"></i>
+                    <span class="font-medium">睡眠模式</span>
+                </div>
+                <div class="control-button bg-gradient-to-r from-green-500 to-teal-600 text-white" id="sceneMovie">
+                    <i class="fas fa-film text-3xl mb-2"></i>
+                    <span class="font-medium">影院模式</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white py-4 mt-auto">
+        <div class="container mx-auto px-4 text-center text-sm text-gray-500">
+            <p>created by <a href="https://space.coze.cn" class="text-blue-500 hover:underline">coze space</a></p>
+            <p>页面内容均由 AI 生成，仅供参考</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 设备控制按钮切换功能
+            const controlButtons = document.querySelectorAll('.control-button:not([id$="sceneHome"]):not([id$="sceneAway"]):not([id$="sceneSleep"]):not([id$="sceneMovie"])');
+            
+            controlButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    this.classList.toggle('active');
+                    this.classList.toggle('inactive');
+                    
+                    // 更新总功率和设备数量
+                    updatePowerStatus();
+                });
+            });
+            
+            // 总电源开关功能
+            const mainPowerToggle = document.getElementById('mainPowerToggle');
+            const powerIndicator = document.querySelector('.power-indicator');
+            
+            mainPowerToggle.addEventListener('change', function() {
+                if (this.checked) {
+                    powerIndicator.classList.add('active');
+                    powerIndicator.classList.remove('inactive');
+                    
+                    // 启用所有控制按钮
+                    controlButtons.forEach(button => {
+                        button.style.opacity = '1';
+                        button.style.pointerEvents = 'auto';
+                    });
+                } else {
+                    powerIndicator.classList.remove('active');
+                    powerIndicator.classList.add('inactive');
+                    
+                    // 禁用所有控制按钮并设置为非活动状态
+                    controlButtons.forEach(button => {
+                        button.classList.remove('active');
+                        button.classList.add('inactive');
+                        button.style.opacity = '0.6';
+                        button.style.pointerEvents = 'none';
+                    });
+                    
+                    // 更新功率状态
+                    updatePowerStatus();
+                }
+            });
+            
+            // 更新功率状态函数
+            function updatePowerStatus() {
+                const activeDevices = document.querySelectorAll('.control-button.active').length;
+                const powerDisplay = document.querySelector('.text-2xl.font-bold.text-blue-600');
+                
+                // 根据活跃设备数量计算功率
+                const power = (activeDevices * 0.24).toFixed(1);
+                
+                // 更新显示
+                document.querySelector('p.text-sm.text-gray-500 + p.text-2xl.font-bold.text-blue-600').textContent = `${power} kW`;
+                document.querySelector('p.text-sm.text-gray-500 + p.text-2xl.font-bold.text-blue-600 + div p.text-sm.text-gray-500 + p.text-2xl.font-bold.text-blue-600').textContent = `${activeDevices} 台`;
+            }
+            
+            // 能耗趋势图表
+            const ctx = document.getElementById('energyChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                    datasets: [{
+                        label: '用电量(kWh)',
+                        data: [7.2, 8.5, 7.8, 9.1, 8.3, 10.2, 8.5],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+            
+            // 快捷场景按钮功能
+            const sceneButtons = document.querySelectorAll('[id$="sceneHome"], [id$="sceneAway"], [id$="sceneSleep"], [id$="sceneMovie"]');
+            
+            sceneButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // 这里可以添加场景切换的具体逻辑
+                    alert(`已切换到${this.querySelector('span').textContent}`);
+                });
+            });
+            
+            // 添加滚动动画效果
+            const fadeElements = document.querySelectorAll('.fade-in');
+            
+            function checkFade() {
+                fadeElements.forEach(element => {
+                    const elementTop = element.getBoundingClientRect().top;
+                    const elementVisible = 150;
+                    
+                    if (elementTop < window.innerHeight - elementVisible) {
+                        element.style.opacity = '1';
+                        element.style.transform = 'translateY(0)';
+                    }
+                });
+            }
+            
+            // 初始检查
+            checkFade();
+            
+            // 滚动时检查
+            window.addEventListener('scroll', checkFade);
+        });
+    </script>
+</body>
+</html>

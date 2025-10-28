@@ -1,0 +1,35 @@
+# Git ignore for STM32 HAL project (Keil MDK + CubeMX)
+
+# Keil MDK-ARM build outputs
+MDK-ARM/**/Objects/
+MDK-ARM/**/Listings/
+MDK-ARM/**/DebugConfig/
+MDK-ARM/**/*.o
+MDK-ARM/**/*.d
+MDK-ARM/**/*.crf
+MDK-ARM/**/*.elf
+MDK-ARM/**/*.map
+MDK-ARM/**/*.lst
+MDK-ARM/**/*.hex
+MDK-ARM/**/*.axf
+
+# Generic build artifacts
+*.o
+*.d
+*.elf
+*.map
+*.lst
+*.hex
+*.bin
+*.srec
+*.out
+*.axf
+*.crf
+
+# IDE caches and temp files
+Thumbs.db
+*.tmp
+*.log
+
+# LVGL or other local builds
+LVGL/**/build/
